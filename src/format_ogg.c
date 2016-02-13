@@ -68,8 +68,9 @@ int shout_open_ogg(shout_t *self)
 {
     ogg_data_t *ogg_data;
 
-	if (!(ogg_data = (ogg_data_t *)calloc(1, sizeof(ogg_data_t))))
+    if (!(ogg_data = (ogg_data_t *)calloc(1, sizeof(ogg_data_t)))) {
         return self->error = SHOUTERR_MALLOC;
+    }
     self->format_data = ogg_data;
 
     ogg_sync_init(&ogg_data->oy);
@@ -100,11 +101,13 @@ static int send_ogg(shout_t *self, const unsigned char *data, size_t len)
             }
 
             codec = calloc(1, sizeof(ogg_codec_t));
-			if (! codec)
+            if (! codec) {
                 return self->error = SHOUTERR_MALLOC;
+            }
 
-			if ((self->error = open_codec(codec, &page)) != SHOUTERR_SUCCESS)
+            if ((self->error = open_codec(codec, &page)) != SHOUTERR_SUCCESS) {
                 return self->error;
+            }
 
             codec->headers = 1;
             codec->senttime = self->senttime;
@@ -120,9 +123,10 @@ static int send_ogg(shout_t *self, const unsigned char *data, size_t len)
                         ogg_stream_pagein(&codec->os, &page);
                         codec->read_page(codec, &page);
 
-						if (self->senttime < codec->senttime)
+                        if (self->senttime < codec->senttime) {
                             self->senttime = codec->senttime;
                         }
+                    }
 
                     break;
                 }
@@ -131,9 +135,10 @@ static int send_ogg(shout_t *self, const unsigned char *data, size_t len)
             }
         }
 
-		if ((self->error = send_page(self, &page)) != SHOUTERR_SUCCESS)
+        if ((self->error = send_page(self, &page)) != SHOUTERR_SUCCESS) {
             return self->error;
         }
+    }
 
     return self->error = SHOUTERR_SUCCESS;
 }
@@ -155,8 +160,9 @@ static int open_codec(ogg_codec_t *codec, ogg_page *page)
         ogg_stream_init(&codec->os, ogg_page_serialno(page));
         ogg_stream_pagein(&codec->os, page);
 
-		if (this_codec(codec, page) == SHOUTERR_SUCCESS)
+        if (this_codec(codec, page) == SHOUTERR_SUCCESS) {
             return SHOUTERR_SUCCESS;
+        }
 
         ogg_stream_clear(&codec->os);
         i++;
@@ -170,8 +176,9 @@ static void free_codecs(ogg_data_t *ogg_data)
 {
     ogg_codec_t *codec, *next;
 
-	if (ogg_data == NULL)
+    if (ogg_data == NULL) {
         return;
+    }
 
     codec = ogg_data->codecs;
     while (codec) {
@@ -184,8 +191,9 @@ static void free_codecs(ogg_data_t *ogg_data)
 
 static void free_codec(ogg_codec_t *codec)
 {
-	if (codec->free_data)
+    if (codec->free_data) {
         codec->free_data(codec->codec_data);
+    }
     ogg_stream_clear(&codec->os);
     free(codec);
 }
@@ -195,11 +203,14 @@ static int send_page(shout_t *self, ogg_page *page)
     int ret;
 
     ret = shout_send_raw(self, page->header, page->header_len);
-	if (ret != page->header_len)
+    if (ret != page->header_len) {
         return self->error = SHOUTERR_SOCKET;
+    }
+
     ret = shout_send_raw(self, page->body, page->body_len);
-	if (ret != page->body_len)
+    if (ret != page->body_len) {
         return self->error = SHOUTERR_SOCKET;
+    }
 
     return SHOUTERR_SUCCESS;
 }
