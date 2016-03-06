@@ -53,6 +53,13 @@ static const uint64_t VARINT_LENGTH_BIT[] = {
 /* tag IDs we're interested in */
 #define WEBM_EBML_ID    (0x1A45DFA3 & EBML_LONG_MASK)
 #define WEBM_SEGMENT_ID (0x18538067 & EBML_LONG_MASK)
+
+#define WEBM_SEEK_HEAD_ID     (0x114D9B74 & EBML_LONG_MASK)
+#define WEBM_INFO_ID          (0x1549A966 & EBML_LONG_MASK)
+#define WEBM_TRACKS_ID        (0x1654AE6B & EBML_LONG_MASK)
+#define WEBM_CUES_ID          (0x1C53BB6B & EBML_LONG_MASK)
+#define WEBM_CHAPTERS_ID      (0x1043A770 & EBML_LONG_MASK)
+
 #define WEBM_CLUSTER_ID (0x1F43B675 & EBML_LONG_MASK)
 
 #define WEBM_TIMECODE_ID     (0xE7 & EBML_SHORT_MASK)
@@ -297,6 +304,30 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
     /* handle tag appropriately */
 
     switch(tag_id) {
+        case WEBM_SEEK_HEAD_ID:
+        case WEBM_CUES_ID:
+        case WEBM_CHAPTERS_ID:
+            if(webm->cat_mode) {
+                /* in cat mode, strip elements that
+                 * make no sense in live streams
+                 */
+                webm->input_read_position += tag_length + payload_length;
+                to_copy = 0;
+            }
+            break;
+
+        case WEBM_EBML_ID:
+        case WEBM_INFO_ID:
+        case WEBM_TRACKS_ID:
+            if(webm->cat_mode && webm->first_file_started) {
+                /* strip EBML headers and other initialization tags
+                 * off of concatenated files when in cat mode
+                 */
+                webm->input_read_position += tag_length + payload_length;
+                to_copy = 0;
+            }
+            break;
+
         case WEBM_SEGMENT_ID:
             if(webm->cat_mode) {
                 /* special logic for cat mode; all content will be
