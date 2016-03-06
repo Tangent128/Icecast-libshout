@@ -115,6 +115,8 @@ static int webm_process(shout_t *self, webm_t *webm);
 static int webm_process_tag(shout_t *self, webm_t *webm);
 static int webm_output(shout_t *self, webm_t *webm, const unsigned char *data, size_t len);
 static size_t webm_output_varint(shout_t *self, webm_t *webm, uint64_t value);
+static void webm_output_int_value(shout_t *self, webm_t *webm,
+                                    uint64_t tag_id, uint64_t value);
 
 static size_t copy_possible(const void *src_base,
                             size_t *src_position,
@@ -516,6 +518,33 @@ static size_t webm_output_varint(shout_t *self, webm_t *webm, uint64_t value)
     /* output */
     webm_output(self, webm, buffer + (8 - size), size);
     return size;
+}
+
+/* Output an EBML tag with int value.
+ * Returns nothing; check self->error to ensure
+ * no I/O error occurred.
+ */
+static void webm_output_int_value(shout_t *self, webm_t *webm,
+                                    uint64_t tag_id, uint64_t value)
+{
+    /* always output full 8 bytes for now,
+     * can be more efficient later if necessary
+     */
+    unsigned char buffer[8];
+    int pos;
+
+    webm_output_varint(self, webm, tag_id);
+    webm_output_varint(self, webm, 8);
+
+    /* form big-endian number in buffer */
+    for(pos = 0; pos < 8; pos++) {
+        buffer[pos] = value >> (7-pos)*8;
+    }
+
+    /* output value */
+    webm_output(self, webm, buffer, 8);
+
+    return;
 }
 
 /* -- utility functions -- */
