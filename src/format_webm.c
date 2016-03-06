@@ -39,6 +39,12 @@
 /* A value that no EBML var-int is allowed to take. */
 #define EBML_UNKNOWN ((uint64_t) -1)
 
+/* bitmasks for the length marker bit in the possible varint lengths */
+static const uint64_t VARINT_LENGTH_BIT[] = {
+    0x80, 0x4000, 0x200000, 0x10000000,
+    0x0800000000, 0x040000000000, 0x02000000000000, 0x0100000000000000
+};
+
 /* masks to turn the tag ID varints from the Matroska spec
  * into their parsed-as-number equivalents */
 #define EBML_LONG_MASK (~0x10000000)
@@ -100,6 +106,7 @@ static void close_webm(shout_t *self);
 static int webm_process(shout_t *self, webm_t *webm);
 static int webm_process_tag(shout_t *self, webm_t *webm);
 static int webm_output(shout_t *self, webm_t *webm, const unsigned char *data, size_t len);
+static size_t webm_output_varint(shout_t *self, webm_t *webm, uint64_t value);
 
 static size_t copy_possible(const void *src_base,
                             size_t *src_position,
@@ -385,6 +392,8 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
     return self->error;
 }
 
+/* -- output functions -- */
+
 /* Queue the given data in the output buffer,
  * flushing as needed. Returns a status code
  * to allow detecting socket errors on a flush.
@@ -404,6 +413,47 @@ static int webm_output(shout_t *self, webm_t *webm, const unsigned char *data, s
     }
 
     return self->error;
+}
+
+/* Output an EBML varint, using shortest possible length.
+ * EBML_UNKNOWN is treated correctly.
+ * Returns the number of bytes output; check self->error to ensure
+ * no I/O error occurred.
+ */
+static size_t webm_output_varint(shout_t *self, webm_t *webm, uint64_t value)
+{
+    unsigned char buffer[8];
+    int size, pos;
+
+    if(value == EBML_UNKNOWN) {
+        /* The canonical version is 8 bytes, but we can express it in 1 */
+        buffer[0] = 0xFF;
+        webm_output(self, webm, buffer, 1);
+        return 1;
+    }
+
+    /* add the size marker bit to the value */
+    for(size = 1; size <= 8; size++) {
+        if(value < VARINT_LENGTH_BIT[size - 1]) {
+            /* fits in this size, add the bit */
+            value |= VARINT_LENGTH_BIT[size - 1];
+            break;
+        }
+    }
+    if(size > 8) {
+        /* out of range, bail */
+        self->error = SHOUTERR_INSANE;
+        return 0;
+    }
+
+    /* form big-endian number in buffer */
+    for(pos = 0; pos < 8; pos++) {
+        buffer[pos] = value >> (7-pos)*8;
+    }
+
+    /* output */
+    webm_output(self, webm, buffer + (8 - size), size);
+    return size;
 }
 
 /* -- utility functions -- */
