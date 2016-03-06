@@ -81,6 +81,7 @@ typedef struct _webm_t {
 
     /* processing state for cat mode */
     bool cat_mode;
+    bool first_file_started;
     uint64_t timestamp_correction;
     uint64_t default_frame_advance;
 
@@ -297,9 +298,39 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
 
     switch(tag_id) {
         case WEBM_SEGMENT_ID:
+            if(webm->cat_mode) {
+                /* special logic for cat mode; all content will be
+                 * merged into a single Segment, so skip the actual tag
+                 */
+
+                webm->input_read_position += tag_length;
+
+                if( ! webm->first_file_started) {
+                    /* start a single unknown-length Segment */
+                    webm_output_varint(self, webm, WEBM_SEGMENT_ID);
+                    webm_output_varint(self, webm, EBML_UNKNOWN);
+                }
+
+                /* webm_output_varint errors are exposed here */
+                return self->error;
+            }
+
+            /* open container to process children */
+            to_copy = tag_length;
+
+            break;
+
         case WEBM_CLUSTER_ID:
             /* open containers to process children */
             to_copy = tag_length;
+
+            if(webm->cat_mode) {
+                /* signal that the content has started;
+                 * future EBML headers, info, tracks can be skipped.
+                 */
+                webm->first_file_started = true;
+            }
+
             break;
 
         case WEBM_TIMECODE_ID:
