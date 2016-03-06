@@ -73,6 +73,9 @@ typedef struct _webm_t {
     webm_parsing_state parsing_state;
     uint64_t copy_len;
 
+    /* processing state for cat mode */
+    bool cat_mode;
+
     /* buffer state */
     size_t input_write_position;
     size_t input_read_position;
@@ -129,6 +132,9 @@ int shout_open_webm(shout_t *self)
 
     /* configure shout state */
     self->format_data = webm_filter;
+
+    /* activate "cat mode" */
+    webm_filter->cat_mode = true;
 
     self->send = send_webm;
     self->close = close_webm;
