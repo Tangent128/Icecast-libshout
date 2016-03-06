@@ -75,6 +75,8 @@ typedef struct _webm_t {
 
     /* processing state for cat mode */
     bool cat_mode;
+    uint64_t timestamp_correction;
+    uint64_t default_frame_advance;
 
     /* buffer state */
     size_t input_write_position;
@@ -135,6 +137,7 @@ int shout_open_webm(shout_t *self)
 
     /* activate "cat mode" */
     webm_filter->cat_mode = true;
+    webm_filter->default_frame_advance = 1;
 
     self->send = send_webm;
     self->close = close_webm;
@@ -306,11 +309,25 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
                 return self->error = SHOUTERR_INSANE;
             }
 
+            /* cat mode: correct timecode for concatenated files */
+            if(webm->cat_mode) {
+                timecode += webm->timestamp_correction;
+
+                if(timecode < webm->latest_timestamp) {
+                    /* backwards jump, assume this starts a new file
+                     * and correct timestamps to preserve monotonicity.
+                     */
+                    webm->latest_timestamp += webm->default_frame_advance;
+                    webm->timestamp_correction += (webm->latest_timestamp - timecode);
+                    timecode = webm->latest_timestamp;
+                }
+            }
+
             /* report timecode */
             webm->cluster_timestamp = timecode;
             webm->latest_timestamp = timecode;
 
-            /* TODO: detect backwards jumps and rewrite to be monotonic */
+            /* TODO: rewrite corrected timecodes in the output */
             break;
 
         case WEBM_BLOCK_GROUP_ID:
