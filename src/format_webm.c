@@ -75,10 +75,6 @@ typedef enum webm_parsing_state {
 /* state for a filter that extracts timestamp
  * information from a WebM stream
  */
-/* TODO: provide for "fake chaining", where
- * concatinated files have extra headers stripped
- * and Cluster timestamps rewritten
- */
 typedef struct _webm_t {
 
     /* processing state */
@@ -404,13 +400,18 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
                     webm->timestamp_correction += (webm->latest_timestamp - timecode);
                     timecode = webm->latest_timestamp;
                 }
+
+                /* rewrite timecode */
+                webm->input_read_position += tag_length + payload_length;
+                to_copy = 0;
+
+                webm_output_int_value(self, webm, WEBM_TIMECODE_ID, timecode);
             }
 
             /* report timecode */
             webm->cluster_timestamp = timecode;
             webm->latest_timestamp = timecode;
 
-            /* TODO: rewrite corrected timecodes in the output */
             break;
 
         case WEBM_BLOCK_GROUP_ID:
