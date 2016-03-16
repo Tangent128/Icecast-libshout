@@ -354,15 +354,27 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
             break;
 
         case WEBM_CLUSTER_ID:
-            /* open containers to process children */
-            to_copy = tag_length;
 
             if(webm->cat_mode) {
                 /* signal that the content has started;
                  * future EBML headers, info, tracks can be skipped.
                  */
                 webm->first_file_started = true;
+
+                /* replace cluster tag with an unknown-size cluster,
+                 * to make rewriting the timecode easier.
+                 */
+                webm->input_read_position += tag_length;
+
+                webm_output_varint(self, webm, WEBM_CLUSTER_ID);
+                webm_output_varint(self, webm, EBML_UNKNOWN);
+
+                /* webm_output_varint errors are exposed here */
+                return self->error;
             }
+
+            /* open container to process children */
+            to_copy = tag_length;
 
             break;
 
