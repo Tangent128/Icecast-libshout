@@ -53,16 +53,18 @@ static const uint64_t VARINT_LENGTH_BIT[] = {
 
 /* tag IDs we're interested in */
 #define WEBM_EBML_ID    (0x1A45DFA3 & EBML_LONG_MASK)
+
 #define WEBM_SEGMENT_ID (0x18538067 & EBML_LONG_MASK)
 
 #define WEBM_SEEK_HEAD_ID     (0x114D9B74 & EBML_LONG_MASK)
-#define WEBM_INFO_ID          (0x1549A966 & EBML_LONG_MASK)
 #define WEBM_TRACKS_ID        (0x1654AE6B & EBML_LONG_MASK)
 #define WEBM_CUES_ID          (0x1C53BB6B & EBML_LONG_MASK)
 #define WEBM_CHAPTERS_ID      (0x1043A770 & EBML_LONG_MASK)
 
-#define WEBM_CLUSTER_ID (0x1F43B675 & EBML_LONG_MASK)
+#define WEBM_INFO_ID          (0x1549A966 & EBML_LONG_MASK)
+#define WEBM_DURATION_ID (0x4489 & EBML_MEDIUM_MASK)
 
+#define WEBM_CLUSTER_ID (0x1F43B675 & EBML_LONG_MASK)
 #define WEBM_TIMECODE_ID     (0xE7 & EBML_SHORT_MASK)
 #define WEBM_SIMPLE_BLOCK_ID (0xA3 & EBML_SHORT_MASK)
 #define WEBM_BLOCK_GROUP_ID (0xA0 & EBML_SHORT_MASK)
@@ -308,6 +310,7 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
         case WEBM_CUES_ID:
         case WEBM_CHAPTERS_ID:
         case WEBM_DISCARD_PADDING_ID:
+        case WEBM_DURATION_ID:
             if(webm->cat_mode) {
                 /* in cat mode, strip elements that
                  * make no sense in live streams
@@ -318,7 +321,6 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
             break;
 
         case WEBM_EBML_ID:
-        case WEBM_INFO_ID:
         case WEBM_TRACKS_ID:
             if(webm->cat_mode && webm->first_file_started) {
                 /* strip EBML headers and other initialization tags
@@ -350,6 +352,27 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
             /* open container to process children */
             to_copy = tag_length;
 
+            break;
+
+        case WEBM_INFO_ID:
+            if(webm->cat_mode) {
+                /* cat mode may edit the Segment Info of the first file, then
+                 * leave out further Info. Either way, skip the given tag.
+                 */
+                webm->input_read_position += tag_length;
+                to_copy = 0;
+                if(webm->first_file_started) {
+                    /* skip extra info tags */
+                    webm->input_read_position += payload_length;
+                } else {
+                    /* open segment info up for mutation */
+                    webm_output_varint(self, webm, WEBM_INFO_ID);
+                    webm_output_varint(self, webm, EBML_UNKNOWN);
+
+                    /* webm_output_varint errors are exposed here */
+                    return self->error;
+                }
+            }
             break;
 
         case WEBM_CLUSTER_ID:
