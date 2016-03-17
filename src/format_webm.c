@@ -48,6 +48,7 @@ static const uint64_t VARINT_LENGTH_BIT[] = {
 /* masks to turn the tag ID varints from the Matroska spec
  * into their parsed-as-number equivalents */
 #define EBML_LONG_MASK (~0x10000000)
+#define EBML_MEDIUM_MASK (~0x4000)
 #define EBML_SHORT_MASK (~0x80)
 
 /* tag IDs we're interested in */
@@ -66,6 +67,7 @@ static const uint64_t VARINT_LENGTH_BIT[] = {
 #define WEBM_SIMPLE_BLOCK_ID (0xA3 & EBML_SHORT_MASK)
 #define WEBM_BLOCK_GROUP_ID (0xA0 & EBML_SHORT_MASK)
 #define WEBM_BLOCK_ID (0xA1 & EBML_SHORT_MASK)
+#define WEBM_DISCARD_PADDING_ID (0x75A2 & EBML_MEDIUM_MASK)
 
 typedef enum webm_parsing_state {
     WEBM_STATE_READ_TAG = 0,
@@ -305,6 +307,7 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
         case WEBM_SEEK_HEAD_ID:
         case WEBM_CUES_ID:
         case WEBM_CHAPTERS_ID:
+        case WEBM_DISCARD_PADDING_ID:
             if(webm->cat_mode) {
                 /* in cat mode, strip elements that
                  * make no sense in live streams
@@ -415,8 +418,21 @@ static int webm_process_tag(shout_t *self, webm_t *webm)
             break;
 
         case WEBM_BLOCK_GROUP_ID:
-            /* open container to process children */
-            to_copy = tag_length;
+            if(webm->cat_mode) {
+                /* Open BlockGroup for potential editing */
+
+                webm->input_read_position += tag_length;
+
+                /* unknown-length BlockGroup */
+                webm_output_varint(self, webm, WEBM_BLOCK_GROUP_ID);
+                webm_output_varint(self, webm, EBML_UNKNOWN);
+
+                /* webm_output_varint errors are exposed here */
+                return self->error;
+            } else {
+                /* open container to process children */
+                to_copy = tag_length;
+            }
 
             break;
 
